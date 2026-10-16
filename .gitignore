@@ -1,0 +1,46 @@
+# 逐帧 JPEG（约 3.4 GB）
+frames/
+
+# 成片 / 封面 / 中间产物
+out/
+stills/
+stills_probe/
+shots/
+sheets/
+crop/
+zoom/
+verify/
+qc_dense/
+qc_final/
+ref_clannad/
+
+# 输入音频与歌词 —— 版权归原权利人，不进版本库
+input/song.mp3
+input/song.wav
+input/song.m4a
+input/song.flac
+input/lyrics.lrc
+input/lyrics.txt
+input/lyrics.zh.txt
+input/song_analysis.json
+input/style.txt
+
+# 由 LRC 生成的字幕数据（含原曲歌词），本地生成，不进版本库
+src/lyrics.js
+src/song.mp3
+
+# Python
+__pycache__/
+*.pyc
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# 中文 Windows 目录注记
+# 若本机工作区路径含中文，new URL('.').pathname 会做百分号编码，
+# 导致读文件类测试恒 ENOENT —— 与代码无关，是路径编码问题。
