@@ -2,7 +2,7 @@
 
 用 Canvas2D 逐帧画出来的一支 MV。**没有剪辑软件，没有图片素材，没有视频素材，没有视频模型。**
 
-成片：429 秒 / 1920×1080 / 30fps / 8191 帧。每一帧都是一段 JavaScript 在 `<canvas>` 上现算现画，由浏览器逐帧截图，再由 ffmpeg 封装成 MP4。项目里唯一的二进制输入是一首 MP3。
+成片：273 秒 / 1920×1080 / 30fps / 8191 帧。每一帧都是一段 JavaScript 在 `<canvas>` 上现算现画，由浏览器逐帧截图，再由 ffmpeg 封装成 MP4。项目里唯一的二进制输入是一首 MP3。
 
 ```
 input/song.mp3  ──┐
@@ -34,20 +34,46 @@ input/lyrics.lrc ─┘        (Canvas2D)         (playwright)                  
 
 ### 依赖
 
-```
-Python 3.8+
-playwright          （pip install playwright && playwright install --dry-run msedge）
-Pillow              （只有拼联系表用得到）
-ffmpeg              任意 recent build
-Edge 或 Chrome      系统自带即可
-```
-
-ffmpeg 与浏览器路径在 `tools/render_frames.py` 顶部，或通过环境变量覆盖：
+**Python 包**：
 
 ```bash
-set EDGE="C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
-set FFMPEG="C:\ffmpeg\bin\ffmpeg.exe"
+pip install -r requirements.txt
 ```
+
+必需的是 `playwright`（驱动浏览器逐帧截图）、`numpy`（测速与对齐的信号处理）、`Pillow`（拼联系表）。可选 `faster-whisper`，只有"只给音频、不给歌词"的自动对齐场景才用到。
+
+`playwright install msedge` **不是必须的** —— 本项目不下载 playwright 自带的浏览器，而是直接驱动系统已装的 Edge/Chrome（见下方 `env.py` 探测逻辑）。系统没有浏览器时才需要它。
+
+**外部程序**：
+
+| 程序 | 必要性 | 说明 |
+|---|---|---|
+| Edge 或 Chrome | 必需 | 渲染器宿主，系统自带即可 |
+| ffmpeg | 必需 | 逐帧 JPEG 编码 + 混流成 MP4 |
+
+**这两个不需要装 py 包，也不需要改源码** —— `tools/env.py` 按「环境变量 → 常见安装位置 → PATH」三级探测，Windows / macOS / Linux 常见路径都覆盖了。找不到时会打印修复提示。手动指定：
+
+```bash
+# Windows
+set EDGE=C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe
+set FFMPEG=C:\ffmpeg\bin\ffmpeg.exe
+
+# macOS / Linux
+export EDGE="/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
+export FFMPEG=/usr/local/bin/ffmpeg
+```
+
+自检（确认路径都能解析）：
+
+```bash
+python -c "import sys; sys.path.insert(0,'tools'); import env; print(env.browser_path()); print(env.ffmpeg_path())"
+```
+
+> **Windows 用户注意**：若 `git push` / `clone` 报 `TLS connect error: unexpected eof while reading`，
+> 是 git 的 openssl 后端与你本机代理冲突。改用 Windows 原生 TLS：
+> ```bash
+> git config http.sslBackend schannel
+> ```
 
 ### 三条命令
 
@@ -58,7 +84,7 @@ python tools/render_frames.py check
 # 2. 逐镜审图：每个分镜抓一张中点位图到 shots/，同时写 manifest.json
 python tools/render_frames.py shots
 
-# 3. 全片：逐帧抓取 + 编码成 out/dango_mv.mp4（本机实测约 605s）
+# 3. 全片：逐帧抓取 + 编码成 out/mv.mp4（本机实测约 605s）
 python tools/render_frames.py full
 ```
 
@@ -87,7 +113,7 @@ python tools/render_frames.py full --fps 30 --from 0 --to 30
 
 画一颗带环的行星，需要判断某个团子是在行星前面还是后面。一开始用轨道参数角算前后（`cos(角度) > 0` 就是前面），转到屏幕坐标之后符号反了 —— 尤其当镜头本身有旋转时。
 
-**做法**：给轨道位置打标记，写探针脚本（`tools/_probe_occlusion.py`）把一组采样点的前后状态全打出来，逐个核对；改用旋转后的短轴方向 `ey < 0` 判定。遮挡随后被拆成五层：
+**做法**：给轨道位置打标记，把一组采样点的前后状态全打出来，逐个核对；改用旋转后的短轴方向 `ey < 0` 判定。遮挡随后被拆成五层：
 
 ```
 环后 → 球 → 背后团子 → 环前 → 面前团子

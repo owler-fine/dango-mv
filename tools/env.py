@@ -101,7 +101,15 @@ DEFAULT_DURATION = 273.031825
 
 
 def file_url(*parts, query=""):
-    """构造 file:// URL（跨平台，反斜杠转正斜杠）。"""
-    p = ROOT.joinpath(*parts)
-    url = "file:///" + str(p).replace("\\", "/")
-    return url + query
+    """构造 file:// URL（跨平台）。
+
+    路径按 URL 规则做 percent-encode：目录名含空格、#、?、% 时
+    交给浏览器的宽松解析会出错，必须显式转义。
+    """
+    p = ROOT.joinpath(*parts).resolve()
+    posix = p.as_posix()
+    # 逐段转义，保留路径分隔符；safe='/:@' 让 Windows 盘符与 POSIX 根原样保留
+    from urllib.parse import quote
+    encoded = quote(posix, safe="/:~")
+    return "file:///" + encoded.lstrip("/") + query
+

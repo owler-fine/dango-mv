@@ -117,15 +117,28 @@ def cmd_shots():
 
 
 def cmd_full(fps, t_from, t_to):
+    if t_to <= t_from:
+        print("!! --to 必须大于 --from（收到 from=%.3f to=%.3f）" % (t_from, t_to))
+        return 1
+    if fps <= 0:
+        print("!! --fps 必须为正整数")
+        return 1
+
     FRAMES.mkdir(exist_ok=True)
     OUT.mkdir(exist_ok=True)
+
+    # 帧号用全局帧号 round(t*fps)，不用循环计数。否则 --from 10 会把 t=10s
+    # 写成 f_000000.jpg，与全片 t=0s 撞名，续渲时静默错位。
+    i_from = int(round(t_from * fps))
+    i_to = int(round(t_to * fps))
+    total = i_to - i_from + 1
+
     with sync_playwright() as pw:
         browser, page = open_page(pw)
-        n = int(round((t_to - t_from) * fps))
         t0 = time.time()
         done = 0
-        for i in range(n + 1):
-            t = t_from + i / fps
+        for i in range(i_from, i_to + 1):
+            t = i / fps
             p = FRAMES / ("f_%06d.jpg" % i)
             if p.exists():
                 done += 1
@@ -133,11 +146,14 @@ def cmd_full(fps, t_from, t_to):
             page.evaluate("(t) => window.__seek(t)", t)
             page.screenshot(path=str(p), type="jpeg", quality=92,
                             clip={"x": 0, "y": 0, "width": CANVAS_W, "height": CANVAS_H})
-            if i % 30 == 0:
+            if (i - i_from) % 30 == 0:
                 el = time.time() - t0
-                rate = i + 1 / max(1e-6, el) if el else 0
+                got = i - i_from + 1 - done
+                rate = got / el if el > 0 else 0
+                left = total - (i - i_from + 1)
+                eta = left / rate if rate > 0 else 0
                 print("  %d/%d  t=%.2fs  %.1f fps  eta %.0fs"
-                      % (i, n, t, rate, (n - i) / max(1e-6, (i + 1) / el)))
+                      % (i - i_from, total - 1, t, rate, eta))
         errs = errors(page)
         browser.close()
     if done:
@@ -151,12 +167,19 @@ def cmd_full(fps, t_from, t_to):
             song = ROOT_INPUT / cand
             break
 
+    # 成片时长比音频长就告警：-shortest 会把画面截断
+    dur = (i_to - i_from + 1) / fps
+    if song and abs(dur - DEFAULT_DURATION) > 1.0:
+        print("提示: 渲染 %.1fs，DEFAULT_DURATION 为 %.1fs。"
+              "若音频更短，混流会用 -shortest 截断画面。" % (dur, DEFAULT_DURATION))
+
     name = "mv"
     if t_from > 0 or t_to < DEFAULT_DURATION:
         name += "_%.0f_%.0f" % (t_from, t_to)
     mp4 = OUT / (name + ".mp4")
 
-    cmd = [ffmpeg_required(), "-y", "-v", "error", "-framerate", str(fps),
+    cmd = [ffmpeg_required(), "-y", "-v", "error",
+           "-framerate", str(fps), "-start_number", str(i_from),
            "-i", str(FRAMES / "f_%06d.jpg")]
     if song:
         cmd += ["-i", str(song), "-map", "0:v:0", "-map", "1:a:0",
